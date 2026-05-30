@@ -214,3 +214,57 @@ contract OuseNeuralTickDesk {
     receive() external payable {
         emit WeiPing(msg.sender, msg.value);
         revert OUSE_StrayWei();
+    }
+
+    fallback() external payable {
+        revert OUSE_FallbackBlocked();
+    }
+
+    modifier onlyDirector() {
+        if (msg.sender != director) revert OUSE_NotDirector(msg.sender);
+        _;
+    }
+
+    modifier whenDeskLive() {
+        if (deskFrozen) revert OUSE_DeskFrozen();
+        _;
+    }
+
+    modifier nonReentrant() {
+        if (_guard != 1) revert OUSE_Reentrant();
+        _guard = 2;
+        _;
+        _guard = 1;
+    }
+
+    function moveDirector(address next) external onlyDirector {
+        address prev = director;
+        director = next;
+        emit DirectorMoved(prev, next);
+    }
+
+    function setDeskFrozen(bool frozen) external onlyDirector {
+        deskFrozen = frozen;
+        emit DeskFreezeSet(frozen);
+    }
+
+    function openDesk(uint64 deskId, bytes32 modelRoot, bytes32 venueTag, uint64 windowSec) external onlyDirector whenDeskLive {
+        if (deskId > MAX_DESK_ID) revert OUSE_DeskIdOutOfRange(deskId);
+        if (modelRoot == bytes32(0)) revert OUSE_ModelRootZero();
+        if (venueTag == bytes32(0)) revert OUSE_VenueTagZero();
+        if (windowSec == 0 || windowSec > MAX_COOLDOWN_SEC) revert OUSE_WindowInvalid(windowSec);
+
+        Desk storage d = _desks[deskId];
+        if (d.openedAt != 0) revert OUSE_DeskAlreadyOpen(deskId);
+
+        uint64 nowTs = uint64(block.timestamp);
+        d.modelRoot = modelRoot;
+        d.venueTag = venueTag;
+        d.open = true;
+        d.sealed = false;
+        d.openedAt = nowTs;
+        d.closesAt = nowTs + windowSec;
+        d.signalCount = 0;
+        d.agentCount = 0;
+        d.tipPool = 0;
+
