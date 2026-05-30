@@ -268,3 +268,57 @@ contract OuseNeuralTickDesk {
         d.agentCount = 0;
         d.tipPool = 0;
 
+        if (deskId > lastDeskId) lastDeskId = deskId;
+        emit DeskOpened(deskId, modelRoot, nowTs, d.closesAt);
+    }
+
+    function extendDesk(uint64 deskId, uint64 extraSec) external onlyDirector whenDeskLive {
+        Desk storage d = _requireOpenDesk(deskId);
+        if (extraSec == 0 || extraSec > MAX_COOLDOWN_SEC) revert OUSE_WindowInvalid(extraSec);
+        d.closesAt += extraSec;
+        emit DeskExtended(deskId, d.closesAt);
+    }
+
+    function sealDesk(uint64 deskId) external onlyDirector {
+        Desk storage d = _requireKnownDesk(deskId);
+        if (d.sealed) revert OUSE_DeskSealed(deskId);
+        d.open = false;
+        d.sealed = true;
+        emit DeskSealed(deskId, d.signalCount, d.agentCount);
+    }
+
+    function pinRisk(
+        uint64 deskId,
+        uint32 maxDrawdownBps,
+        uint32 maxPositionBps,
+        uint32 cooldownSec
+    ) external onlyDirector whenDeskLive {
+        _requireOpenDesk(deskId);
+        if (maxDrawdownBps > MAX_DRAWNDOWN_BPS) revert OUSE_DrawdownTooHigh(maxDrawdownBps, MAX_DRAWNDOWN_BPS);
+        if (maxPositionBps > MAX_POSITION_BPS) revert OUSE_PositionTooHigh(maxPositionBps, MAX_POSITION_BPS);
+        if (cooldownSec > MAX_COOLDOWN_SEC) revert OUSE_CooldownTooLong(cooldownSec, MAX_COOLDOWN_SEC);
+
+        RiskEnvelope storage r = _risk[deskId];
+        if (r.locked) revert OUSE_RiskLocked(deskId);
+        r.maxDrawdownBps = maxDrawdownBps;
+        r.maxPositionBps = maxPositionBps;
+        r.cooldownSec = cooldownSec;
+        r.locked = true;
+        emit RiskPinned(deskId, maxDrawdownBps, maxPositionBps, cooldownSec);
+    }
+
+    function unlockRisk(uint64 deskId) external onlyDirector {
+        _requireKnownDesk(deskId);
+        delete _risk[deskId];
+        emit RiskUnlocked(deskId);
+    }
+
+    function seatAgent(
+        uint64 deskId,
+        address agent,
+        bytes32 personaHash,
+        bytes32 policyHash
+    ) external whenDeskLive {
+        Desk storage d = _requireOpenDesk(deskId);
+        if (personaHash == bytes32(0)) revert OUSE_PersonaZero();
+        if (policyHash == bytes32(0)) revert OUSE_PolicyZero();
