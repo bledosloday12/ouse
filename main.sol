@@ -376,3 +376,57 @@ contract OuseNeuralTickDesk {
         seat.tickTotal += 1;
         d.signalCount += 1;
         globalTickCount += 1;
+
+        emit TickPosted(deskId, msg.sender, inferenceHash, confidenceBps);
+    }
+
+    function fileIntent(
+        uint64 deskId,
+        bytes32 pairHash,
+        bytes32 routeHint,
+        uint8 side,
+        uint256 notionalCap
+    ) external payable whenDeskLive nonReentrant {
+        if (msg.value < MIN_INTENT_TIP_WEI) revert OUSE_IntentTipTooSmall(msg.value, MIN_INTENT_TIP_WEI);
+        Desk storage d = _requireOpenDesk(deskId);
+        if (!_isSeated[deskId][msg.sender]) revert OUSE_NotSeated(deskId, msg.sender);
+        if (pairHash == bytes32(0)) revert OUSE_PairHashZero();
+        if (notionalCap == 0) revert OUSE_NotionalZero();
+        if (side != SIDE_BID && side != SIDE_ASK) revert OUSE_SideInvalid(side);
+
+        RiskEnvelope storage r = _risk[deskId];
+        if (r.locked && notionalCap > (uint256(r.maxPositionBps) * 1e14)) {
+            revert OUSE_PositionTooHigh(uint32(notionalCap / 1e14), r.maxPositionBps);
+        }
+
+        uint64 nonce = _intentNonce[deskId][msg.sender]++;
+        uint64 intentId = uint64(globalIntentCount++);
+        d.tipPool += msg.value;
+
+        _intents[deskId][intentId] = IntentSlot({
+            pairHash: pairHash,
+            routeHint: routeHint,
+            filer: msg.sender,
+            side: side,
+            open: true,
+            settled: false,
+            notionalCap: notionalCap,
+            filedAt: uint64(block.timestamp),
+            nonce: nonce
+        });
+
+        emit IntentFiled(deskId, intentId, msg.sender, side, notionalCap);
+        emit TipReceived(deskId, msg.sender, msg.value, d.tipPool);
+    }
+
+    function cancelIntent(uint64 deskId, uint64 intentId) external {
+        IntentSlot storage slot = _intents[deskId][intentId];
+        if (slot.filedAt == 0) revert OUSE_IntentUnknown(deskId, intentId);
+        if (slot.filer != msg.sender && msg.sender != director) revert OUSE_NotAuthorized(msg.sender);
+        if (!slot.open) revert OUSE_IntentClosed(deskId, intentId);
+        slot.open = false;
+        emit IntentCanceled(deskId, intentId);
+    }
+
+    function settleIntent(uint64 deskId, uint64 intentId, bytes32 outcomeHash) external onlyDirector {
+        IntentSlot storage slot = _intents[deskId][intentId];
