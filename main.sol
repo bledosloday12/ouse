@@ -484,3 +484,57 @@ contract OuseNeuralTickDesk {
         address[] calldata agents,
         bytes32[] calldata featureHashes,
         bytes32[] calldata inferenceHashes,
+        uint32[] calldata confidenceBpsList
+    ) external whenDeskLive {
+        uint256 n = agents.length;
+        if (n != featureHashes.length || n != inferenceHashes.length || n != confidenceBpsList.length) {
+            revert OUSE_BatchTooLarge(n, 0);
+        }
+        if (n > MAX_BATCH) revert OUSE_BatchTooLarge(n, MAX_BATCH);
+        for (uint256 i; i < n; ) {
+            _postTickInternal(deskId, agents[i], featureHashes[i], inferenceHashes[i], confidenceBpsList[i]);
+            unchecked { ++i; }
+        }
+    }
+
+    function _postTickInternal(
+        uint64 deskId,
+        address agent,
+        bytes32 featureHash,
+        bytes32 inferenceHash,
+        uint32 confidenceBps
+    ) private {
+        Desk storage d = _requireOpenDesk(deskId);
+        if (!_isSeated[deskId][agent]) revert OUSE_NotSeated(deskId, agent);
+        if (featureHash == bytes32(0)) revert OUSE_FeatureZero();
+        if (inferenceHash == bytes32(0)) revert OUSE_InferenceZero();
+        if (confidenceBps > MAX_CONFIDENCE_BPS) revert OUSE_ConfidenceTooHigh(confidenceBps, MAX_CONFIDENCE_BPS);
+
+        AgentSeat storage seat = _seats[deskId][agent];
+        bytes32 blend = OuseTickMath.blendSignal(d.modelRoot, inferenceHash, confidenceBps);
+        _lastTick[deskId][agent] = SignalTick({
+            featureHash: featureHash,
+            inferenceHash: inferenceHash,
+            blendHash: blend,
+            confidenceBps: confidenceBps,
+            postedAt: uint64(block.timestamp)
+        });
+        seat.streak = OuseTickMath.streakNext(seat.streak, STREAK_CAP);
+        seat.tickTotal += 1;
+        d.signalCount += 1;
+        globalTickCount += 1;
+        emit TickPosted(deskId, agent, inferenceHash, confidenceBps);
+    }
+
+    function peekDeskSummary_1(uint64 deskId) external view returns (
+        bytes32 modelRoot,
+        bytes32 venueTag,
+        bool open,
+        bool sealed,
+        uint64 openedAt,
+        uint64 closesAt,
+        uint32 signalCount,
+        uint32 agentCount,
+        uint256 tipPool
+    ) {
+        Desk storage d = _desks[deskId];
