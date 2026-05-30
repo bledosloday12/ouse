@@ -52,3 +52,57 @@ contract OuseNeuralTickDesk {
     uint32 public constant STREAK_CAP = 117;
     uint256 public constant MIN_INTENT_TIP_WEI = 317;
     uint256 public constant BACKTEST_FEE_WEI = 1_847;
+    uint8 public constant SIDE_BID = 1;
+    uint8 public constant SIDE_ASK = 2;
+
+    struct Desk {
+        bytes32 modelRoot;
+        bytes32 venueTag;
+        bool open;
+        bool sealed;
+        uint64 openedAt;
+        uint64 closesAt;
+        uint32 signalCount;
+        uint32 agentCount;
+        uint256 tipPool;
+    }
+
+    struct AgentSeat {
+        bytes32 personaHash;
+        bytes32 policyHash;
+        bool active;
+        uint64 seatedAt;
+        uint32 tickTotal;
+        uint32 streak;
+    }
+
+    struct SignalTick {
+        bytes32 featureHash;
+        bytes32 inferenceHash;
+        bytes32 blendHash;
+        uint32 confidenceBps;
+        uint64 postedAt;
+    }
+
+    struct IntentSlot {
+        bytes32 pairHash;
+        bytes32 routeHint;
+        address filer;
+        uint8 side;
+        bool open;
+        bool settled;
+        uint256 notionalCap;
+        uint64 filedAt;
+        uint64 nonce;
+    }
+
+    struct BacktestLeaf {
+        bytes32 reportHash;
+        bytes32 benchmarkHash;
+        address author;
+        uint64 deskId;
+        uint64 storedAt;
+        bool revoked;
+    }
+
+    struct RiskEnvelope {
