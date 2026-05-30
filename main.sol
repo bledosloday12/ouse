@@ -430,3 +430,57 @@ contract OuseNeuralTickDesk {
 
     function settleIntent(uint64 deskId, uint64 intentId, bytes32 outcomeHash) external onlyDirector {
         IntentSlot storage slot = _intents[deskId][intentId];
+        if (slot.filedAt == 0) revert OUSE_IntentUnknown(deskId, intentId);
+        if (slot.settled) revert OUSE_IntentAlreadySettled(deskId, intentId);
+        slot.open = false;
+        slot.settled = true;
+        slot.routeHint = outcomeHash;
+        emit IntentSettled(deskId, intentId, outcomeHash);
+    }
+
+    function storeBacktest(
+        uint64 deskId,
+        bytes32 reportHash,
+        bytes32 benchmarkHash
+    ) external payable whenDeskLive nonReentrant {
+        if (msg.value < BACKTEST_FEE_WEI) revert OUSE_BacktestFeeShort(msg.value, BACKTEST_FEE_WEI);
+        _requireKnownDesk(deskId);
+        if (reportHash == bytes32(0)) revert OUSE_FeatureZero();
+        if (_usedReport[reportHash]) revert OUSE_ReportReplay(reportHash);
+
+        uint256 leafId = ++backtestSeq;
+        _backtests[leafId] = BacktestLeaf({
+            reportHash: reportHash,
+            benchmarkHash: benchmarkHash,
+            author: msg.sender,
+            deskId: deskId,
+            storedAt: uint64(block.timestamp),
+            revoked: false
+        });
+        _usedReport[reportHash] = true;
+        emit BacktestStored(leafId, deskId, msg.sender, reportHash);
+    }
+
+    function revokeBacktest(uint256 leafId) external onlyDirector {
+        BacktestLeaf storage leaf = _backtests[leafId];
+        if (leaf.storedAt == 0) revert OUSE_BacktestUnknown(leafId);
+        leaf.revoked = true;
+        emit BacktestRevoked(leafId, msg.sender);
+    }
+
+    function withdrawDeskTips(uint64 deskId, uint256 amountWei) external onlyDirector nonReentrant {
+        if (amountWei == 0) revert OUSE_WithdrawZero();
+        Desk storage d = _desks[deskId];
+        if (amountWei > d.tipPool) revert OUSE_InsufficientTipPool(amountWei, d.tipPool);
+        d.tipPool -= amountWei;
+        (bool ok, ) = director.call{value: amountWei}("");
+        if (!ok) revert OUSE_TransferFailed();
+        emit TipsWithdrawn(director, amountWei);
+    }
+
+
+    function batchPostTicks(
+        uint64 deskId,
+        address[] calldata agents,
+        bytes32[] calldata featureHashes,
+        bytes32[] calldata inferenceHashes,
