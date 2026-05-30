@@ -538,3 +538,57 @@ contract OuseNeuralTickDesk {
         uint256 tipPool
     ) {
         Desk storage d = _desks[deskId];
+        return (
+            d.modelRoot,
+            d.venueTag,
+            d.open,
+            d.sealed,
+            d.openedAt,
+            d.closesAt,
+            d.signalCount,
+            d.agentCount,
+            d.tipPool
+        );
+    }
+
+    function peekDeskSummary_2(uint64 deskId) external view returns (
+        bytes32 modelRoot,
+        bytes32 venueTag,
+        bool open,
+        bool sealed,
+        uint64 openedAt,
+        uint64 closesAt,
+        uint32 signalCount,
+        uint32 agentCount,
+        uint256 tipPool
+    ) {
+        Desk storage d = _desks[deskId];
+        return (
+            d.modelRoot,
+            d.venueTag,
+            d.open,
+            d.sealed,
+            d.openedAt,
+            d.closesAt,
+            d.signalCount,
+            d.agentCount,
+            d.tipPool
+        );
+    }
+
+    function peekDeskSummary_3(uint64 deskId) external view returns (
+        bytes32 modelRoot,
+        bytes32 venueTag,
+        bool open,
+        bool sealed,
+        uint64 openedAt,
+        uint64 closesAt,
+        uint32 signalCount,
+        uint32 agentCount,
+        uint256 tipPool
+    ) {
+        Desk storage d = _desks[deskId];
+        return (
+            d.modelRoot,
+            d.venueTag,
+            d.open,
