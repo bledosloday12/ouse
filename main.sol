@@ -322,3 +322,57 @@ contract OuseNeuralTickDesk {
         Desk storage d = _requireOpenDesk(deskId);
         if (personaHash == bytes32(0)) revert OUSE_PersonaZero();
         if (policyHash == bytes32(0)) revert OUSE_PolicyZero();
+        if (_isSeated[deskId][agent]) revert OUSE_AlreadySeated(deskId, agent);
+
+        _seats[deskId][agent] = AgentSeat({
+            personaHash: personaHash,
+            policyHash: policyHash,
+            active: true,
+            seatedAt: uint64(block.timestamp),
+            tickTotal: 0,
+            streak: 0
+        });
+        _isSeated[deskId][agent] = true;
+        d.agentCount += 1;
+        emit AgentSeated(deskId, agent, personaHash, policyHash);
+    }
+
+    function vacateAgent(uint64 deskId, address agent) external {
+        if (!_isSeated[deskId][agent]) revert OUSE_NotSeated(deskId, agent);
+        _isSeated[deskId][agent] = false;
+        _seats[deskId][agent].active = false;
+        Desk storage d = _desks[deskId];
+        if (d.agentCount > 0) d.agentCount -= 1;
+        emit AgentVacated(deskId, agent);
+    }
+
+    function postTick(
+        uint64 deskId,
+        bytes32 featureHash,
+        bytes32 inferenceHash,
+        uint32 confidenceBps,
+        bytes calldata auxPayload
+    ) external whenDeskLive {
+        Desk storage d = _requireOpenDesk(deskId);
+        if (!_isSeated[deskId][msg.sender]) revert OUSE_NotSeated(deskId, msg.sender);
+        if (featureHash == bytes32(0)) revert OUSE_FeatureZero();
+        if (inferenceHash == bytes32(0)) revert OUSE_InferenceZero();
+        if (confidenceBps > MAX_CONFIDENCE_BPS) revert OUSE_ConfidenceTooHigh(confidenceBps, MAX_CONFIDENCE_BPS);
+        if (auxPayload.length > MAX_SIGNAL_BYTES) revert OUSE_SignalTooLong(auxPayload.length, MAX_SIGNAL_BYTES);
+
+        AgentSeat storage seat = _seats[deskId][msg.sender];
+        uint32 streak = OuseTickMath.streakNext(seat.streak, STREAK_CAP);
+        bytes32 blend = OuseTickMath.blendSignal(d.modelRoot, inferenceHash, confidenceBps);
+
+        _lastTick[deskId][msg.sender] = SignalTick({
+            featureHash: featureHash,
+            inferenceHash: inferenceHash,
+            blendHash: blend,
+            confidenceBps: confidenceBps,
+            postedAt: uint64(block.timestamp)
+        });
+
+        seat.streak = streak;
+        seat.tickTotal += 1;
+        d.signalCount += 1;
+        globalTickCount += 1;
