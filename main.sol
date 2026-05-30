@@ -160,3 +160,57 @@ contract OuseNeuralTickDesk {
     error OUSE_IntentClosed(uint64 deskId, uint64 intentId);
     error OUSE_IntentAlreadySettled(uint64 deskId, uint64 intentId);
     error OUSE_PairHashZero();
+    error OUSE_SideInvalid(uint8 side);
+    error OUSE_NotionalZero();
+    error OUSE_RiskLocked(uint64 deskId);
+    error OUSE_DrawdownTooHigh(uint32 bps, uint32 maxBps);
+    error OUSE_PositionTooHigh(uint32 bps, uint32 maxBps);
+    error OUSE_CooldownTooLong(uint32 sec, uint32 maxSec);
+    error OUSE_BatchTooLarge(uint256 n, uint256 maxN);
+    error OUSE_WithdrawZero();
+    error OUSE_InsufficientTipPool(uint256 requested, uint256 available);
+    error OUSE_TransferFailed();
+    error OUSE_WindowInvalid(uint64 windowSec);
+    error OUSE_Reentrant();
+    error OUSE_StrayWei();
+    error OUSE_FallbackBlocked();
+    error OUSE_NotAuthorized(address caller);
+    error OUSE_BacktestUnknown(uint256 leafId);
+
+    event Booted(uint64 indexed genesisNonce, address indexed director, uint256 chainId, uint64 buildTag);
+    event DirectorMoved(address indexed previous, address indexed next);
+    event DeskFreezeSet(bool frozen);
+    event DeskOpened(uint64 indexed deskId, bytes32 modelRoot, uint64 openedAt, uint64 closesAt);
+    event DeskExtended(uint64 indexed deskId, uint64 newClosesAt);
+    event DeskSealed(uint64 indexed deskId, uint32 signalCount, uint32 agentCount);
+    event AgentSeated(uint64 indexed deskId, address indexed agent, bytes32 personaHash, bytes32 policyHash);
+    event AgentVacated(uint64 indexed deskId, address indexed agent);
+    event TickPosted(uint64 indexed deskId, address indexed agent, bytes32 inferenceHash, uint32 confidenceBps);
+    event IntentFiled(uint64 indexed deskId, uint64 indexed intentId, address indexed filer, uint8 side, uint256 notionalCap);
+    event IntentCanceled(uint64 indexed deskId, uint64 indexed intentId);
+    event IntentSettled(uint64 indexed deskId, uint64 indexed intentId, bytes32 outcomeHash);
+    event BacktestStored(uint256 indexed leafId, uint64 indexed deskId, address indexed author, bytes32 reportHash);
+    event BacktestRevoked(uint256 indexed leafId, address indexed director);
+    event RiskPinned(uint64 indexed deskId, uint32 maxDrawdownBps, uint32 maxPositionBps, uint32 cooldownSec);
+    event RiskUnlocked(uint64 indexed deskId);
+    event TipReceived(uint64 indexed deskId, address indexed from, uint256 amountWei, uint256 deskPool);
+    event TipsWithdrawn(address indexed director, uint256 amountWei);
+    event WeiPing(address indexed from, uint256 amountWei);
+
+    constructor() {
+        ADDRESS_A = 0xA508518A3B326f1eb8eE16B3BC08Dc35544bEBDf;
+        ADDRESS_B = 0x6Dec6772505d899Fda48867074371A33aE36Fad3;
+        ADDRESS_C = 0x982523F4c2C39110bA12d059FdC84E2fa5a8470b;
+
+        deployChainId = uint64(block.chainid);
+        director = msg.sender;
+        genesisNonce = uint64(
+            uint256(keccak256(abi.encodePacked(deployChainId, msg.sender, block.prevrandao, OUSE_SEED))) >> 192
+        );
+
+        emit Booted(genesisNonce, msg.sender, block.chainid, OUSE_BUILD_TAG);
+    }
+
+    receive() external payable {
+        emit WeiPing(msg.sender, msg.value);
+        revert OUSE_StrayWei();
