@@ -106,3 +106,57 @@ contract OuseNeuralTickDesk {
     }
 
     struct RiskEnvelope {
+        uint32 maxDrawdownBps;
+        uint32 maxPositionBps;
+        uint32 cooldownSec;
+        bool locked;
+    }
+
+    address public director;
+    bool public deskFrozen;
+
+    uint64 public genesisNonce;
+    uint64 public deployChainId;
+    uint64 public lastDeskId;
+    uint256 public globalTickCount;
+    uint256 public globalIntentCount;
+    uint256 public backtestSeq;
+
+    mapping(uint64 => Desk) private _desks;
+    mapping(uint64 => mapping(address => AgentSeat)) private _seats;
+    mapping(uint64 => mapping(address => bool)) private _isSeated;
+    mapping(uint64 => mapping(address => SignalTick)) private _lastTick;
+    mapping(uint64 => mapping(address => uint32)) private _agentStreak;
+    mapping(uint64 => mapping(address => uint64)) private _intentNonce;
+    mapping(uint64 => mapping(uint64 => IntentSlot)) private _intents;
+    mapping(uint64 => RiskEnvelope) private _risk;
+    mapping(uint256 => BacktestLeaf) private _backtests;
+    mapping(bytes32 => bool) private _usedReport;
+
+    uint256 private _guard = 1;
+
+
+    error OUSE_NotDirector(address caller);
+    error OUSE_DeskFrozen();
+    error OUSE_DeskUnknown(uint64 deskId);
+    error OUSE_DeskAlreadyOpen(uint64 deskId);
+    error OUSE_DeskClosed(uint64 deskId);
+    error OUSE_DeskSealed(uint64 deskId);
+    error OUSE_DeskIdOutOfRange(uint64 deskId);
+    error OUSE_ModelRootZero();
+    error OUSE_VenueTagZero();
+    error OUSE_PersonaZero();
+    error OUSE_PolicyZero();
+    error OUSE_FeatureZero();
+    error OUSE_InferenceZero();
+    error OUSE_AlreadySeated(uint64 deskId, address agent);
+    error OUSE_NotSeated(uint64 deskId, address agent);
+    error OUSE_SignalTooLong(uint256 len, uint256 maxLen);
+    error OUSE_ConfidenceTooHigh(uint32 bps, uint32 maxBps);
+    error OUSE_IntentTipTooSmall(uint256 sent, uint256 minWei);
+    error OUSE_BacktestFeeShort(uint256 sent, uint256 required);
+    error OUSE_ReportReplay(bytes32 reportHash);
+    error OUSE_IntentUnknown(uint64 deskId, uint64 intentId);
+    error OUSE_IntentClosed(uint64 deskId, uint64 intentId);
+    error OUSE_IntentAlreadySettled(uint64 deskId, uint64 intentId);
+    error OUSE_PairHashZero();
